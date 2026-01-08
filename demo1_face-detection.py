@@ -1,7 +1,7 @@
 import time
 import cv2
 
-from model_insightface import InsightFaceEngine
+
 from insightface.app import FaceAnalysis
 
 def main():
