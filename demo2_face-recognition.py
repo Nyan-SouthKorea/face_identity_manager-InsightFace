@@ -11,11 +11,15 @@ from insightface.app import FaceAnalysis
 from tqdm import tqdm
 from PIL import Image, ImageDraw, ImageFont
 
+# custom
+from utils import imread_kr, imwrite_kr
+
 class Stream_FR:
     def __init__(self, threshold=0.7):
         # 변수 초기화
         self.threshold = threshold
         self.results = []
+        self.crop_face_pitch = 160
 
         # 폰트 초기화
         self.color_known = (255,0,0) # PIL 이미지 rgb 기준
@@ -55,21 +59,16 @@ class Stream_FR:
         # 갤러리 dic 초기화
         gallary = {}
 
-        # 폴더 규칙: 영어 이름, 한글 이름(", "로 구분)
+        # 폴더 규칙: 한글 이름, 영어 이름(", "로 구분)
         folder_list = os.listdir('gallary')
         # 폴더별로 얼굴 임베딩 추출
         for folder in tqdm(folder_list, desc='갤러리 로드'):
-            en_name = folder
+            kr_name, en_name = folder.split(', ')
             # 폴더 내 이미지별로 추출
             embeddings = []
             for img_name in os.listdir(f'gallary/{folder}'):
-                # 별도 폴더를 하나 더 만들고, 한글 이름을 넣도록 하여 해당 기능 예외 처리 진행
-                if '.jpg' not in img_name:
-                    kr_name = img_name
-                    continue
-
                 # 이미지 정상적으로 읽고 얼굴 임베딩 추출
-                img = cv2.imread(f'gallary/{folder}/{img_name}')
+                img = imread_kr(f'gallary/{folder}/{img_name}')
                 faces = self.app.get(img)
                 if len(faces) == 0:
                     print(f'경고: gallary/{folder}/{img_name}에서 얼굴을 찾지 못했습니다')
@@ -77,6 +76,10 @@ class Stream_FR:
                 # 첫 번째 하나의 얼굴만 사용(무조건 이미지 한 장 안에 하나의 얼굴만 있다고 가정)
                 face = faces[0]
                 embedding = face.embedding # 512차원 얼굴 임베딩 추출
+                x1, y1, x2, y2 = face.bbox.astype(int)
+                # crop_face는 나중에 활용 예정
+                crop_face = img[y1:y2, x1:x2]
+                crop_face = cv2.resize(crop_face, (self.crop_face_pitch, self.crop_face_pitch))                
                 embeddings.append(embedding)
             # 갤러리에 저장
             gallary[en_name] = {'kr_name':kr_name, 'embeddings':embeddings}
@@ -108,8 +111,9 @@ class Stream_FR:
                     for gallary_emb in info['embeddings']:
                         sim = self.get_similarity(webcam_embedding, gallary_emb)
                         sims.append(sim)
-                    sims.sort(reverse=True)
-                    avg_sim = np.mean(sims[:2]) # 상위 2개 유사도의 평균
+                    sims = sorted(sims, reverse=True)
+                    # 상위 2개 유사도 평균 내기
+                    avg_sim = np.mean(sims[:2])
                     sim_dict[en_name] = avg_sim
                 # 최고 유사도를 가진 갤러리 인물 선택
                 best_en_name = max(sim_dict, key=sim_dict.get)
@@ -121,13 +125,13 @@ class Stream_FR:
                 else:
                     results.append({'en_name':'Unknown', 'kr_name':'미등록', 'similarity':best_sim, 'bbox':face.bbox.astype(int), 'det_score':float(face.det_score)})
                     # 미등록 얼굴 이미지 통채로 저장
-                    cv2.imwrite(f'unknown/unknown_{self.unknown_cnt}.jpg', self.img)
+                    imwrite_kr(f'unknown/unknown_{self.unknown_cnt}.jpg', self.img)
                     self.unknown_cnt += 1
             
             # main 로직에서 업데이트 가능하도록 results 복사
             self.results = deepcopy(results)
 
-        
+
     def _draw_fr(self, mode='kr'):
         '''
         안면 인식 결과를 이미지에 그려주는 함수
@@ -148,12 +152,12 @@ class Stream_FR:
             en_name, kr_name = result['en_name'], result['kr_name']
             similarity = result['similarity']
 
-            # 색상 지정
+            # 색상 지정 및 crop_face 좌측 상단에 붙이기
             if en_name == 'Unknown':
                 draw_color = self.color_unknown
             else:
                 draw_color = self.color_known
-            
+  
             # bbox 그리기
             draw.rectangle([(x1, y1), (x2, y2)], outline=draw_color, width=2) # rgb 컬러 기준
 
