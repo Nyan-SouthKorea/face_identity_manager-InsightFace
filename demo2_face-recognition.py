@@ -27,13 +27,9 @@ class Stream_FR:
         self.font = ImageFont.truetype('NanumGothicBold.ttf', 24)
 
         # 필요 폴더 생성
-        for folder in ['gallary', 'unknown']:
+        for folder in ['gallary', 'snapshot']:
             os.makedirs(folder, exist_ok=True)
-        
-        # 미등록 이미지 저장 카운터 초기화
-        unknown_imgs = os.listdir(f'unknown')
-        self.unknown_cnt = len(unknown_imgs)
-        
+                
         # 안면 인식 엔진 초기화
         print('안면 인식 엔진 초기화 중... ', end='')
         modelpack = 'buffalo_l' # buffalo_l, buffalo_s(표준) // antelopev2(최신 고성능)
@@ -124,9 +120,6 @@ class Stream_FR:
                     results.append({'en_name':best_en_name, 'kr_name':kr_name, 'similarity':best_sim, 'bbox':face.bbox.astype(int), 'det_score':float(face.det_score)})
                 else:
                     results.append({'en_name':'Unknown', 'kr_name':'미등록', 'similarity':best_sim, 'bbox':face.bbox.astype(int), 'det_score':float(face.det_score)})
-                    # 미등록 얼굴 이미지 통채로 저장
-                    imwrite_kr(f'unknown/unknown_{self.unknown_cnt}.jpg', self.img)
-                    self.unknown_cnt += 1
             
             # main 로직에서 업데이트 가능하도록 results 복사
             self.results = deepcopy(results)
@@ -178,7 +171,6 @@ class Stream_FR:
         main 로직으로써, 카메라로 입력된 비디오를 실시간으로 스트리밍 해준다.
         안면 인식 기능은 멀티쓰레드로 구동되어 정보를 전달 받아 표시한다.
         '''
-        
         # 웹캠 초기화
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
@@ -204,8 +196,15 @@ class Stream_FR:
             
             # 이미지 출력(esc 누르면 종료)
             cv2.imshow('Face Recognition', draw_img)
-            if cv2.waitKey(1) == 27:
+            key = cv2.waitKey(1)
+
+            # esc 버튼을 누르면 종료
+            if key == 27:
                 break
+            # s 버튼 누르면 이미지 저장
+            elif key == ord('s'):
+                imwrite_kr(f'snapshot/snapshot_{int(time.time())}.jpg', img)
+                print('스냅샷 저장 완료')
     
     def get_similarity(self, emb1, emb2):
         """임베딩 2개를 받아 0 ~ 1 범위의 유사도 점수를 반환"""
